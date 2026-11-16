@@ -1,0 +1,72 @@
+name: CodeQL
+
+# When does this run?
+#  - push to master: keeps the "baseline" alert list on the default branch fresh.
+#  - pull_request to master: scans the PR and annotates new alerts inline on the diff.
+#  - schedule: new queries ship weekly; this re-scans unchanged code against them.
+#  - workflow_dispatch: manual "Run workflow" button.
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+  schedule:
+    - cron: "23 4 * * 1" # Mondays 04:23 UTC. Odd minute avoids the top-of-hour GitHub load spike.
+  workflow_dispatch:
+
+# Cancel a superseded run on the same PR/branch to save minutes.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: the default GITHUB_TOKEN gets only what's listed here.
+permissions:
+  contents: read # checkout
+  security-events: write # upload SARIF results to the Security tab (the one CodeQL really needs)
+  actions: read # needed by github/codeql-action in private repos to read workflow run info
+  packages: read # lets CodeQL download query packs from GitHub Packages if you use custom ones
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false # one language failing shouldn't cancel the others
+      matrix:
+        # CodeQL analyses ONE language per database, so we fan out a matrix job per language.
+        # Language identifiers (not file extensions):
+        #   javascript-typescript  covers .js .jsx .ts .tsx (landing-v3, corpwiki, peopleportal ui/server)
+        #   python                 covers horizon/ and peopleportal pfp-face-check
+        #   actions                scans .github/workflows for injection / unpinned-permission bugs
+        # build-mode `none` = CodeQL reads the source directly, no compile step.
+        # Interpreted languages (JS/TS, Python, Actions) support it. Compiled ones
+        # (Java, C/C++, C#, Go, Swift, Kotlin) may need `autobuild` or `manual`.
+        include:
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+          - language: actions
+            build-mode: none
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Step 1: INIT. Downloads the CodeQL CLI + query packs and creates an empty database.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql/codeql-config.yml
+
+      # Step 2: ANALYZE. Extracts the code into the database (a relational
+      # representation of the code), runs the queries against it, and uploads
+      # SARIF results to Security > Code scanning.
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}" # keeps each language's alerts separate

@@ -1,0 +1,25 @@
+# CodeQL configuration, referenced from .github/workflows/codeql.yml via
+#   config-file: ./.github/codeql/codeql-config.yml
+#
+# Everything here is optional. Without this file CodeQL scans every file of the
+# chosen languages with the default query suite.
+
+name: TechOps CodeQL config
+
+# Which queries to run. A "query suite" is a named bundle of queries:
+#   default            high-precision security queries (GitHub's default)
+#   security-extended  default + lower-precision security queries (more findings, more noise)
+#   security-and-quality  security-extended + code-quality queries (most noise)
+# The workflow deliberately does not set `queries:`, so the choice lives only here.
+queries:
+  - uses: security-extended
+
+# Paths CodeQL should not report on. Findings in these files are dropped.
+# Useful for tests, generated code, vendored code and local dev tooling that is
+# never deployed. Globs: `*` = within a folder, `**` = across folders.
+paths-ignore:
+  - "**/node_modules/**"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "horizon/tests/**"
+  - "peopleportal/dev-stack/**"   # local-only dev scripts, never deployed
